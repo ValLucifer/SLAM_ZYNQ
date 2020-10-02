@@ -35,7 +35,7 @@
 #include"KeyFrameDatabase.h"
 #include"ORBextractor.h"
 #include "Initializer.h"
-#include "MapDrawer.h"
+// #include "MapDrawer.h"
 #include "System.h"
 
 #include <mutex>
@@ -54,7 +54,7 @@ class Tracking
 {  
 
 public:
-    Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Map* pMap,
+    Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, Map* pMap,
              KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor);
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
@@ -176,7 +176,7 @@ protected:
     //Drawers
     Viewer* mpViewer;
     FrameDrawer* mpFrameDrawer;
-    MapDrawer* mpMapDrawer;
+    // MapDrawer* mpMapDrawer;
 
     //Map
     Map* mpMap;
