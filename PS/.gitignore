@@ -1,0 +1,5 @@
+Examples/RGB-D/rgbd_tum
+KeyFrameTrajectory.txt
+Vocabulary/ORBvoc.txt
+build/
+*~
