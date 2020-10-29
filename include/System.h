@@ -36,7 +36,7 @@
 #include "LoopClosing.h"
 #include "KeyFrameDatabase.h"
 #include "ORBVocabulary.h"
-#include "Viewer.h"
+// #include "Viewer.h"
 
 namespace ORB_SLAM2
 {

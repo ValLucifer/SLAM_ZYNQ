@@ -40,7 +40,8 @@ if(NOT OpenCV_FOUND)
    endif()
 endif()
 
-find_package(Eigen3 3.1.0 REQUIRED)
+# find_package(Eigen3 3.1.0 REQUIRED)
+set (EIGEN3_INCLUDE_DIR "/usr/include/eigen3")
 find_package(Pangolin REQUIRED)
 
 include_directories(
@@ -74,7 +75,7 @@ src/Initializer.cc
 # src/Viewer.cc
 )
 
-set(OPENCV_DYNAMIC_LIBS  "/home/magicstudio/SLAM_ZYNQ/libs/opencv/lib")       # 动态 opencv native 库路径
+set(OPENCV_DYNAMIC_LIBS  "/usr/local/arm/lib")       # 动态 opencv native 库路径
 add_library(libopencv_dnn SHARED IMPORTED )
 set_target_properties(libopencv_dnn PROPERTIES   IMPORTED_LOCATION "${OPENCV_DYNAMIC_LIBS}/libopencv_dnn.so")
 

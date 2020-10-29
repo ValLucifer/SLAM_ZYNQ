@@ -39,9 +39,9 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 include_directories(${OpenCV_INCLUDE_DIRS})
 add_library(DBoW2 SHARED ${SRCS_DBOW2} ${SRCS_DUTILS})
 
-set(OPENCV_DYNAMIC_LIBS  "/home/magicstudio/SLAM_ZYNQ/libs/opencv/lib")       # 动态 opencv native 库路径
+set(OPENCV_DYNAMIC_LIBS  "/usr/local/arm/lib")       # 动态 opencv native 库路径
 add_library(libopencv_dnn SHARED IMPORTED )
-set_target_properties(libopencv_dnn PROPERTIES   IMPORTED_LOCATION "/home/magicstudio/SLAM_ZYNQ/libs/opencv/lib/libopencv_dnn.so")
+set_target_properties(libopencv_dnn PROPERTIES   IMPORTED_LOCATION "${OPENCV_DYNAMIC_LIBS}/libopencv_dnn.so")
 
 set(mOpenCV_LIBS libopencv_dnn)
 
