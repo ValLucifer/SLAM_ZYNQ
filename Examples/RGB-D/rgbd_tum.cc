@@ -18,6 +18,7 @@
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define COMPILEDWITHC11
 
 #include<iostream>
 #include<algorithm>

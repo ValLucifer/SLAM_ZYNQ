@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 project(ORB_SLAM2)
 
 IF(NOT CMAKE_BUILD_TYPE)
-  SET(CMAKE_BUILD_TYPE Release)
+  SET(CMAKE_BUILD_TYPE Debug)
 ENDIF()
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
@@ -12,10 +12,6 @@ set( CMAKE_SYSTEM_PROCESSOR arm )
 set( CMAKE_C_COMPILER arm-linux-gnueabihf-gcc )
 set( CMAKE_CXX_COMPILER arm-linux-gnueabihf-g++ )
 set( CMAKE_INSTALL_PREFIX ${PROJECT_SOURCE_DIR}/install )
-set( PKG_CONFIG_LIBDIR ${PROJECT_SOURCE_DIR}/Thirdparty/lib/pkgconfig )
-# set( CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER )
-# set( CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY )
-# set( CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY )
 
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O3 -march=armv7-a")
@@ -64,8 +60,21 @@ target_link_libraries(${PROJECT_NAME}
 
 # Build examples
 
-# set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
+link_directories(${PROJECT_SOURCE_DIR}/Thirdparty/OpenCV/lib/)
+set(OPENCV_LIBS -lopencv_dnn -lopencv_highgui -lopencv_ml -lopencv_objdetect -lopencv_shape 
+                -lopencv_stitching -lopencv_superres -lopencv_videostab -lopencv_calib3d -lopencv_videoio 
+                -lopencv_imgcodecs -lopencv_features2d -lopencv_video -lopencv_photo -lopencv_imgproc 
+                -lopencv_flann -lopencv_core
+                -lavcodec -lavdevice -lavfilter -lavformat -lavutil
+                -lswresample -lswscale -lx264)
 
-# add_executable(rgbd_tum
-# Examples/RGB-D/rgbd_tum.cc)
-# target_link_libraries(rgbd_tum ${PROJECT_NAME})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
+add_executable(rgbd_tum
+Examples/RGB-D/rgbd_tum.cc)
+target_link_libraries(rgbd_tum ${PROJECT_NAME} ${OPENCV_LIBS})
+
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/myExample)
+add_executable(orbslam_test ${PROJECT_SOURCE_DIR}/Examples/myExample/orbslam_test.cpp)
+target_link_libraries(orbslam_test ${PROJECT_NAME} ${OPENCV_LIBS})
+  

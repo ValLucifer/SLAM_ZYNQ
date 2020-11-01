@@ -3,3 +3,4 @@ KeyFrameTrajectory.txt
 Vocabulary/ORBvoc.txt
 build/
 *~
+.vscode/
