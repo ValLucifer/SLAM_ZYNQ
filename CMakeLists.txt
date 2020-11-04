@@ -23,6 +23,7 @@ message(STATUS "Using flag -std=c++11.")
 
 include_directories(
 ${PROJECT_SOURCE_DIR}
+${PROJECT_SOURCE_DIR}/Thirdparty
 ${PROJECT_SOURCE_DIR}/include
 ${PROJECT_SOURCE_DIR}/Thirdparty/eigen3
 ${PROJECT_SOURCE_DIR}/Thirdparty/OpenCV
@@ -60,21 +61,40 @@ target_link_libraries(${PROJECT_NAME}
 
 # Build examples
 
-link_directories(${PROJECT_SOURCE_DIR}/Thirdparty/OpenCV/lib/)
+link_directories(${PROJECT_SOURCE_DIR}/Thirdparty/OpenCV/lib/
+                 ${PROJECT_SOURCE_DIR}/Thirdparty/cma/lib/)
 set(OPENCV_LIBS -lopencv_dnn -lopencv_highgui -lopencv_ml -lopencv_objdetect -lopencv_shape 
                 -lopencv_stitching -lopencv_superres -lopencv_videostab -lopencv_calib3d -lopencv_videoio 
                 -lopencv_imgcodecs -lopencv_features2d -lopencv_video -lopencv_photo -lopencv_imgproc 
                 -lopencv_flann -lopencv_core
                 -lavcodec -lavdevice -lavfilter -lavformat -lavutil
                 -lswresample -lswscale -lx264)
+set(CMA_LIBS -lcma -lpthread)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 add_executable(rgbd_tum
 Examples/RGB-D/rgbd_tum.cc)
 target_link_libraries(rgbd_tum ${PROJECT_NAME} ${OPENCV_LIBS})
 
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/myExample)
 add_executable(orbslam_test ${PROJECT_SOURCE_DIR}/Examples/myExample/orbslam_test.cpp)
 target_link_libraries(orbslam_test ${PROJECT_NAME} ${OPENCV_LIBS})
-  
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/dma_test)
+add_executable(dma_test ${PROJECT_SOURCE_DIR}/Examples/dma_test/dma_test.c)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/cma_test)
+add_executable(cma_test ${PROJECT_SOURCE_DIR}/Examples/cma_test/cma_test.c)
+target_link_libraries(cma_test ${CMA_LIBS})
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/fpga_orb_test)
+set(CMAKE_xxx_CXX_FLAGS "-O0")
+add_executable(fpga_orb_test_old ./Examples/fpga_orb_test/fpga_orb_test_old.cpp)
+set_target_properties(fpga_orb_test_old PROPERTIES COMPILE_FLAGS ${CMAKE_xxx_CXX_FLAGS})
+target_link_libraries(fpga_orb_test_old ${OPENCV_LIBS} ${CMA_LIBS})
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/fpga_orb_test)
+set(CMAKE_xxx_CXX_FLAGS "-O0")
+add_executable(fpga_orb_test ./Examples/fpga_orb_test/fpga_orb_test.cpp)
+set_target_properties(fpga_orb_test PROPERTIES COMPILE_FLAGS ${CMAKE_xxx_CXX_FLAGS})
+target_link_libraries(fpga_orb_test ${OPENCV_LIBS} ${CMA_LIBS})
