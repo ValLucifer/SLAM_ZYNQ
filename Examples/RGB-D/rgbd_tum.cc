@@ -97,6 +97,7 @@ int main(int argc, char **argv)
 
         // Pass the image to the SLAM system
         SLAM.TrackRGBD(imRGB,imD,tframe);
+        printf("%d/%d frames done\n", ni, nImages);
 
 #ifdef COMPILEDWITHC11
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();

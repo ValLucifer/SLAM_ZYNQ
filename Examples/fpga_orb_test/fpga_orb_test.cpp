@@ -57,13 +57,14 @@ int main(int argc, char **argv) {
     gaus.dispMM2SStatus();
     desc.dispS2MMStatus();
 
-    // fast.reset();
-    // gaus.reset();
-    // desc.reset();
+    printf("reseting DMA channels\n");
+    fast.reset();
+    gaus.reset();
+    desc.reset();
 
-    // fast.halt();
-    // gaus.halt();
-    // desc.halt();
+    fast.dispMM2SStatus();
+    gaus.dispMM2SStatus();
+    desc.dispS2MMStatus();
 
     printf("starting DMA channels.\n");
     fast.startSendChannel();
@@ -87,19 +88,25 @@ int main(int argc, char **argv) {
     desc.waitforRecvDone();
     printf("desc is done\n");
 
+    printf("halting DMA channels\n");
+    fast.halt();
+    gaus.halt();
+    desc.halt();
+
     fast.dispMM2SStatus();
     gaus.dispMM2SStatus();
     desc.dispS2MMStatus();
 
     int bytesRecvd = desc.getBytesRecvd();
+    int keypointsRecvd = (bytesRecvd / 40) + 3;
 
     KeyPointAndDesc *keyPointAndDescs = (KeyPointAndDesc*)dstBuf;
 
     printf("received %d bytes in total.\n", bytesRecvd);
-    printf("extracted %d key points in total.\n", (bytesRecvd / 40) - 1);
+    printf("extracted %d key points in total.\n", keypointsRecvd);
 
-    for(int i = 0; i < 10; i++)
-        printf("X: %d, Y: %d\n", ((KeyPointAndDesc*)dstBuf)[i].posX, ((KeyPointAndDesc*)dstBuf)[i].posY);
+    for(int i = 1; i <= 10; i++)
+        printf("X: %d, Y: %d\n", ((KeyPointAndDesc*)dstBuf)[keypointsRecvd - i].posX, ((KeyPointAndDesc*)dstBuf)[keypointsRecvd - i].posY);
 
     cma_free(srcBuf);
     cma_free(dstBuf);

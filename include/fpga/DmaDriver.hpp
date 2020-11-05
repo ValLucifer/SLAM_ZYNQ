@@ -18,6 +18,9 @@
 
 class DMAChannel {
 public:
+    DMAChannel() {
+        dmaCtrlBaseVAddr = nullptr;
+    }
     DMAChannel(unsigned int dmaCtrlBasePAddr) {
         int devMem = open("/dev/mem", O_RDWR | O_SYNC);
         if(devMem < 0)
@@ -76,7 +79,7 @@ public:
     }
 
     void waitforSendDone() {
-        unsigned int mm2sStatus = getReg(MM2S_STATUS_REGISTER);
+        volatile unsigned int mm2sStatus = getReg(MM2S_STATUS_REGISTER);
         while(!(mm2sStatus & 1<<12) || !(mm2sStatus & 1<<1)){
             // printf("1\n");
             mm2sStatus = getReg(MM2S_STATUS_REGISTER);
@@ -84,7 +87,7 @@ public:
     }
 
     void waitforRecvDone() {
-        unsigned int s2mmStatus = getReg(S2MM_STATUS_REGISTER);
+        volatile unsigned int s2mmStatus = getReg(S2MM_STATUS_REGISTER);
         while(!(s2mmStatus & 1<<12) || !(s2mmStatus & 1<<1)){
             // printf("2\n");
             s2mmStatus = getReg(S2MM_STATUS_REGISTER);
