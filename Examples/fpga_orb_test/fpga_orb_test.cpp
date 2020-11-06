@@ -2,7 +2,7 @@
 #include <string>
 
 #include <opencv2/opencv.hpp>
-#include <fpga/DmaDriver.hpp>
+#include <fpga/DmaDriver.h>
 
 extern "C" {
     #include <cma/libxlnk_cma.h>

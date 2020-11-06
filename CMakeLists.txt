@@ -53,7 +53,35 @@ src/Initializer.cc
 # src/Viewer.cc
 )
 
+add_library(ORB_SLAM2_FPGA SHARED
+src/System.cc
+src/Tracking.cc
+src/LocalMapping.cc
+src/LoopClosing.cc
+src/fpga/FPGAORBextractor.cc
+src/ORBmatcher.cc
+src/FrameDrawer.cc
+src/Converter.cc
+src/MapPoint.cc
+src/KeyFrame.cc
+src/Map.cc
+# src/MapDrawer.cc
+src/Optimizer.cc
+src/PnPsolver.cc
+src/Frame.cc
+src/KeyFrameDatabase.cc
+src/Sim3Solver.cc
+src/Initializer.cc
+# src/Viewer.cc
+)
+
 target_link_libraries(${PROJECT_NAME}
+   ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
+   ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
+   ${PROJECT_SOURCE_DIR}/Thirdparty/OpenCV/lib/libopencv_dnn.so
+)
+
+target_link_libraries(ORB_SLAM2_FPGA
    ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
    ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
    ${PROJECT_SOURCE_DIR}/Thirdparty/OpenCV/lib/libopencv_dnn.so
@@ -87,6 +115,11 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/cma_test)
 add_executable(cma_test ${PROJECT_SOURCE_DIR}/Examples/cma_test/cma_test.c)
 target_link_libraries(cma_test ${CMA_LIBS})
 
+add_library(DmaDriver SHARED
+src/fpga/DmaDriver.cc
+)
+set_target_properties(DmaDriver PROPERTIES COMPILE_FLAGS "-O3")
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/fpga_orb_test)
 set(CMAKE_xxx_CXX_FLAGS "-O0")
 add_executable(fpga_orb_test_old ./Examples/fpga_orb_test/fpga_orb_test_old.cpp)
@@ -94,7 +127,6 @@ set_target_properties(fpga_orb_test_old PROPERTIES COMPILE_FLAGS ${CMAKE_xxx_CXX
 target_link_libraries(fpga_orb_test_old ${OPENCV_LIBS} ${CMA_LIBS})
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/fpga_orb_test)
-set(CMAKE_xxx_CXX_FLAGS "-O0")
 add_executable(fpga_orb_test ./Examples/fpga_orb_test/fpga_orb_test.cpp)
-set_target_properties(fpga_orb_test PROPERTIES COMPILE_FLAGS ${CMAKE_xxx_CXX_FLAGS})
-target_link_libraries(fpga_orb_test ${OPENCV_LIBS} ${CMA_LIBS})
+set_target_properties(fpga_orb_test PROPERTIES COMPILE_FLAGS "-O3")
+target_link_libraries(fpga_orb_test ${OPENCV_LIBS} ${CMA_LIBS} DmaDriver)

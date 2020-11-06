@@ -86,7 +86,7 @@ public:
         allKpAndDesc.resize(cntLayers);
         for(int i = 0; i < cntLayers; i++) {
             allKpAndDesc[i].resize(cntKeypointsPerLayer[i]);
-            memcpy(&allKpAndDesc[i], (void*)dstBuf + offsetInBytes, cntKeypointsPerLayer[i] * sizeof(KeypointAndDesc));
+            memcpy(&allKpAndDesc[i], dstBuf + offsetInBytes, cntKeypointsPerLayer[i] * sizeof(KeypointAndDesc));
             // extra 1 for terminating sign
             offsetInBytes += (cntKeypointsPerLayer[i] + 1) * sizeof(KeypointAndDesc);
         }
@@ -109,7 +109,7 @@ public:
 
     void DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNode &n3, ExtractorNode &n4);
 
-    std::vector<cv::KeyPoint> vKeys;
+    std::vector<KeypointAndDesc> vKeys;
     cv::Point2i UL, UR, BL, BR;
     std::list<ExtractorNode>::iterator lit;
     bool bNoMore;
@@ -161,7 +161,8 @@ protected:
 
     _FPGAORBextractor _fpgaORBextractor;
 
-    void ComputeKeyPointsOctTree(std::vector<std::vector<KeypointAndDesc> >& allKeypointsAndDesc, vector< vector<KeypointAndDesc> >& resultKeypointsAndDesc);    
+    void ComputeKeyPointsOctTree(vector<std::vector<KeypointAndDesc> >& allKeypointsAndDesc, 
+                                 vector< vector<KeypointAndDesc> >& resultKeypointsAndDesc);    
     std::vector<KeypointAndDesc> DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
                                                    const int &minX, const int &maxX, const int &minY, const int &maxY,
                                                    const int &nFeatures, const int &level);

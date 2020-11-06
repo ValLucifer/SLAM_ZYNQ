@@ -147,15 +147,15 @@ void ExtractorNode::DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNo
     //Associate points to childs
     for(size_t i=0;i<vKeys.size();i++)
     {
-        const cv::KeyPoint &kp = vKeys[i];
-        if(kp.pt.x<n1.UR.x)
+        const KeypointAndDesc &kp = vKeys[i];
+        if(kp.posX<n1.UR.x)
         {
-            if(kp.pt.y<n1.BR.y)
+            if(kp.posY<n1.BR.y)
                 n1.vKeys.push_back(kp);
             else
                 n3.vKeys.push_back(kp);
         }
-        else if(kp.pt.y<n1.BR.y)
+        else if(kp.posY<n1.BR.y)
             n2.vKeys.push_back(kp);
         else
             n4.vKeys.push_back(kp);
@@ -202,7 +202,7 @@ vector<KeypointAndDesc> FPGAORBextractor::DistributeOctTree(const vector<Keypoin
     for(size_t i=0;i<vToDistributeKeyAndDescs.size();i++)
     {
         const KeypointAndDesc &kpAndDesc = vToDistributeKeyAndDescs[i];
-        vpIniNodes[kp.pt.x/hX]->vKeys.push_back(kp);
+        vpIniNodes[kpAndDesc.posX/hX]->vKeys.push_back(kpAndDesc);
     }
 
     list<ExtractorNode>::iterator lit = lNodes.begin();
@@ -375,12 +375,12 @@ vector<KeypointAndDesc> FPGAORBextractor::DistributeOctTree(const vector<Keypoin
     }
 
     // Retain the best point in each node
-    vector<cv::KeyPoint> vResultKeys;
+    vector<KeypointAndDesc> vResultKeys;
     vResultKeys.reserve(nfeatures);
     for(list<ExtractorNode>::iterator lit=lNodes.begin(); lit!=lNodes.end(); lit++)
     {
-        vector<cv::KeyPoint> &vNodeKeys = lit->vKeys;
-        cv::KeyPoint* pKP = &vNodeKeys[0];
+        vector<KeypointAndDesc> &vNodeKeys = lit->vKeys;
+        KeypointAndDesc* pKP = &vNodeKeys[0];
         float maxResponse = pKP->response;
 
         for(size_t k=1;k<vNodeKeys.size();k++)
@@ -399,12 +399,12 @@ vector<KeypointAndDesc> FPGAORBextractor::DistributeOctTree(const vector<Keypoin
 }
 
 void FPGAORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >& allKeypointAndDescs,
-                                               vector< vector<KeypointAndDesc> >& resultKeypointAndDescs)
+                                               vector< vector<KeypointAndDesc> >& distributedKeypointAndDescs)
 {
 
     const float W = 30;
 
-    resultKeypointAndDescs.reserve(nlevels);
+    distributedKeypointAndDescs.reserve(nlevels);
     for (int level = 0; level < nlevels; ++level)
     {
         const int minBorderX = EDGE_THRESHOLD-3;
@@ -414,7 +414,7 @@ void FPGAORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >&
 
         vector<KeypointAndDesc> &vToDistributeKeypointAndDescs = allKeypointAndDescs[level];
 
-        vector<KeypointAndDesc> & layerKeypointAndDescs = resultKeypointAndDescs[level];
+        vector<KeypointAndDesc> & layerKeypointAndDescs = distributedKeypointAndDescs[level];
         layerKeypointAndDescs.reserve(nfeatures);
 
         layerKeypointAndDescs = DistributeOctTree(vToDistributeKeypointAndDescs, minBorderX, maxBorderX,
@@ -423,13 +423,13 @@ void FPGAORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >&
         const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
 
         // Add border to coordinates and scale information
-        const int nkps = keypoints.size();
+        const int nkps = layerKeypointAndDescs.size();
         for(int i=0; i<nkps ; i++)
         {
-            keypoints[i].pt.x+=minBorderX;
-            keypoints[i].pt.y+=minBorderY;
-            keypoints[i].octave=level;
-            keypoints[i].size = scaledPatchSize;
+            layerKeypointAndDescs[i].posX+=minBorderX;
+            layerKeypointAndDescs[i].posY+=minBorderY;
+            // layerKeypointAndDescs[i].octave=level;
+            // layerKeypointAndDescs[i].size = scaledPatchSize;
         }
     }
 }
@@ -443,18 +443,18 @@ void FPGAORBextractor::operator()( InputArray _image, InputArray _mask, vector<K
     Mat image = _image.getMat();
     assert(image.type() == CV_8UC1 );
 
-    vector< vector<KeypointAndDesc> > allKpAndDesc;
-    _fpgaORBextractor.extract(image, allKpAndDesc);
+    vector< vector<KeypointAndDesc> > allKeypointAndDescs;
+    _fpgaORBextractor.extract(image, allKeypointAndDescs);
 
-    vector < vector<KeyPoint> > allKeypoints;
-    ComputeKeyPointsOctTree(allKeypoints);
+    vector < vector<KeypointAndDesc> > distributedKeypointAndDescs;
+    ComputeKeyPointsOctTree(allKeypointAndDescs, distributedKeypointAndDescs);
     //ComputeKeyPointsOld(allKeypoints);
 
     Mat descriptors;
 
     int nkeypoints = 0;
     for (int level = 0; level < nlevels; ++level)
-        nkeypoints += (int)allKeypoints[level].size();
+        nkeypoints += (int)distributedKeypointAndDescs[level].size();
     if( nkeypoints == 0 )
         _descriptors.release();
     else
@@ -469,19 +469,22 @@ void FPGAORBextractor::operator()( InputArray _image, InputArray _mask, vector<K
     int offset = 0;
     for (int level = 0; level < nlevels; ++level)
     {
-        vector<KeyPoint>& keypoints = allKeypoints[level];
+        vector<KeypointAndDesc>& keypoints = distributedKeypointAndDescs[level];
         int nkeypointsLevel = (int)keypoints.size();
 
         if(nkeypointsLevel==0)
             continue;
 
-        // preprocess the resized image
-        Mat workingMat = mvImagePyramid[level].clone();
-        GaussianBlur(workingMat, workingMat, Size(7, 7), 2, 2, BORDER_REFLECT_101);
-
         // Compute the descriptors
         Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
-        computeDescriptors(workingMat, keypoints, desc, pattern);
+        for(int i = 0; i < nkeypointsLevel; i++) {
+            uchar* pCurDescriptor = desc.ptr<uchar>(i);
+            for(int j = 0; j < 32; j++)
+                // haven't converted the byte order
+                // so the bytes in one uint32 will be reversed
+                // but theoreticaly this won't affect the matching of keypoints
+                pCurDescriptor[j] = ((uchar*)keypoints[i].desc)[j];
+        }
 
         offset += nkeypointsLevel;
 
@@ -489,12 +492,17 @@ void FPGAORBextractor::operator()( InputArray _image, InputArray _mask, vector<K
         if (level != 0)
         {
             float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
-            for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
-                 keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint)
-                keypoint->pt *= scale;
+            for (vector<KeypointAndDesc>::iterator keypoint = keypoints.begin(),
+                 keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint) {
+                // keypoint->posX *= scale;
+                // keypoint->posY *= scale;
+
+                _keypoints.push_back(cv::KeyPoint(keypoint->posX*scale, keypoint->posY*scale, 
+                                                  PATCH_SIZE*scale, keypoint->response, level));
+            }
         }
         // And add the keypoints to the output
-        _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
+        // _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
     }
 }
 
