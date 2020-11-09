@@ -1,33 +1,113 @@
-/**
-* This file is part of ORB-SLAM2.
-*
-* Copyright (C) 2014-2016 Raúl Mur-Artal <raulmur at unizar dot es> (University of Zaragoza)
-* For more information see <https://github.com/raulmur/ORB_SLAM2>
-*
-* ORB-SLAM2 is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* ORB-SLAM2 is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
-*/
-
 #ifndef ORBEXTRACTOR_H
 #define ORBEXTRACTOR_H
 
+#include <cstdio>
+#include <cstring>
 #include <vector>
 #include <list>
-#include <opencv/cv.h>
 
+#include <opencv/cv.h>
+#include <opencv2/core.hpp>
+#include "cma/libxlnk_cma.h"
+
+#include "fpga/DmaDriver.h"
+
+using namespace std;
+using namespace cv;
+
+// DMA regs base address (set in vivado address editor)
+const unsigned int GAUS_BASE_PADDR = 0x40400000;
+const unsigned int FAST_BASE_PADDR = 0x40410000;
+const unsigned int DESC_BASE_PADDR = 0x40420000;
+
+const unsigned int cntLayers = 4;
 
 namespace ORB_SLAM2
 {
+    // data struct received from PL
+typedef struct KeypointAndDesc {
+    uint32_t desc[8];   // 256-bit descriptor(already been rotated to main direction)
+    uint32_t posX;      // horizontal coordinate
+    uint32_t posY;      // vertical coordinate
+    uint32_t response;  // response value
+} KeypointAndDesc;
+
+class _FPGAORBextractor {
+public:
+
+    _FPGAORBextractor() {}
+
+    _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints) {
+        printf("+++++FPGAORBExtractor Constructor+++++\n");
+
+        this->imgSizeInBytes = imgSizeInBytes;
+        this->dstBufSizeInBytes = maxCntKeypoints * sizeof(KeypointAndDesc);
+
+        fast = DMAChannel(FAST_BASE_PADDR);
+        gaus = DMAChannel(GAUS_BASE_PADDR);
+        desc = DMAChannel(DESC_BASE_PADDR);
+
+        // extra 1 byte for pyramid level
+        srcBuf = (uchar*)cma_alloc(imgSizeInBytes + 1, 0);
+        srcBufPAddr = cma_get_phy_addr((void*)srcBuf);
+        dstBuf = (KeypointAndDesc*)cma_alloc(dstBufSizeInBytes, 0);
+        dstBufPAddr = cma_get_phy_addr((void*)dstBuf);
+
+        fast.reset();
+        gaus.reset();
+        desc.reset();
+
+        fast.startSendChannel();
+        gaus.startSendChannel();
+        desc.startRecvChannel();
+
+        printf("-----FPGAORBExtractor Constructor-----\n");
+    }
+
+    void extract(const Mat &img, vector< vector<KeypointAndDesc> > &allKpAndDesc) {
+        memcpy(srcBuf + 1, (void*)img.data, imgSizeInBytes);
+
+        int bytesRecvd;
+        int totalBytesRecvd = 0;
+        int cntKeypointsPerLayer[4];
+        for(int i = 0; i < 4; i++) {
+            *srcBuf = i;
+
+            desc.recv(dstBufPAddr + totalBytesRecvd, dstBufSizeInBytes);
+            gaus.send(srcBufPAddr, imgSizeInBytes + 1);
+            fast.send(srcBufPAddr, imgSizeInBytes + 1);
+
+            fast.waitforSendDone();
+            gaus.waitforSendDone();
+            desc.waitforRecvDone();
+
+            bytesRecvd = desc.getBytesRecvd();
+            cntKeypointsPerLayer[i] = (bytesRecvd / sizeof(KeypointAndDesc)) - 1;
+            totalBytesRecvd += bytesRecvd;
+        }
+
+        int offsetInKpAndDesc = 0;
+        allKpAndDesc.resize(cntLayers);
+        for(int i = 0; i < cntLayers; i++) {
+            allKpAndDesc[i].resize(cntKeypointsPerLayer[i]);
+            allKpAndDesc[i] = vector<KeypointAndDesc>(dstBuf + offsetInKpAndDesc, dstBuf + offsetInKpAndDesc + cntKeypointsPerLayer[i]);
+            offsetInKpAndDesc += cntKeypointsPerLayer[i] + 1;
+        }
+    }
+
+    // ~FPGAORBextractor() {
+    //     fast.destroy();
+    // }
+
+private:
+    int imgSizeInBytes, dstBufSizeInBytes;
+
+    DMAChannel fast, gaus, desc;
+
+    uchar *srcBuf;
+    KeypointAndDesc *dstBuf;
+    unsigned long srcBufPAddr, dstBufPAddr;
+};
 
 class ExtractorNode
 {
@@ -36,7 +116,7 @@ public:
 
     void DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNode &n3, ExtractorNode &n4);
 
-    std::vector<cv::KeyPoint> vKeys;
+    std::vector<KeypointAndDesc> vKeys;
     cv::Point2i UL, UR, BL, BR;
     std::list<ExtractorNode>::iterator lit;
     bool bNoMore;
@@ -46,12 +126,12 @@ class ORBextractor
 {
 public:
     
-    enum {HARRIS_SCORE=0, FAST_SCORE=1 };
+    enum { HARRIS_SCORE=0, FAST_SCORE=1 };
 
     ORBextractor(int nfeatures, float scaleFactor, int nlevels,
                  int iniThFAST, int minThFAST);
 
-    ~ORBextractor(){}
+    ORBextractor(){}
 
     // Compute the ORB features and descriptors on an image.
     // ORB are dispersed on the image using an octree.
@@ -86,13 +166,13 @@ public:
 
 protected:
 
-    void ComputePyramid(cv::Mat image);
-    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);    
-    std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
-                                           const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
+    _FPGAORBextractor _fpgaORBextractor;
 
-    void ComputeKeyPointsOld(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
-    std::vector<cv::Point> pattern;
+    void ComputeKeyPointsOctTree(vector<std::vector<KeypointAndDesc> >& allKeypointsAndDesc, 
+                                 vector< vector<KeypointAndDesc> >& resultKeypointsAndDesc);    
+    std::vector<KeypointAndDesc> DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
+                                                   const int &minX, const int &maxX, const int &minY, const int &maxY,
+                                                   const int &nFeatures, const int &level);
 
     int nfeatures;
     double scaleFactor;
@@ -113,4 +193,3 @@ protected:
 } //namespace ORB_SLAM
 
 #endif
-

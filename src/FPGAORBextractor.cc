@@ -60,7 +60,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <vector>
 
-#include "fpga/FPGAORBextractor.hpp"
+#include "ORBextractor.h"
 
 
 using namespace cv;
@@ -73,7 +73,7 @@ const int PATCH_SIZE = 31;
 const int HALF_PATCH_SIZE = 15;
 const int EDGE_THRESHOLD = 19;
 
-FPGAORBextractor::FPGAORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
+ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
          int _iniThFAST, int _minThFAST):
     nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels),
     iniThFAST(_iniThFAST), minThFAST(_minThFAST)
@@ -172,7 +172,7 @@ void ExtractorNode::DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNo
 
 }
 
-vector<KeypointAndDesc> FPGAORBextractor::DistributeOctTree(const vector<KeypointAndDesc>& vToDistributeKeyAndDescs, const int &minX,
+vector<KeypointAndDesc> ORBextractor::DistributeOctTree(const vector<KeypointAndDesc>& vToDistributeKeyAndDescs, const int &minX,
                                        const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
 {
     // Compute how many initial nodes   
@@ -398,7 +398,7 @@ vector<KeypointAndDesc> FPGAORBextractor::DistributeOctTree(const vector<Keypoin
     return vResultKeys;
 }
 
-void FPGAORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >& allKeypointAndDescs,
+void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >& allKeypointAndDescs,
                                                vector< vector<KeypointAndDesc> >& distributedKeypointAndDescs)
 {
 
@@ -434,7 +434,7 @@ void FPGAORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >&
     }
 }
 
-void FPGAORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
+void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                       OutputArray _descriptors)
 { 
     if(_image.empty())
