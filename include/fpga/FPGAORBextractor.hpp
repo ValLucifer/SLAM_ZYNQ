@@ -7,18 +7,14 @@
 #include <opencv2/core.hpp>
 #include "cma/libxlnk_cma.h"
 
-#include "DmaDriver.hpp"
+#include "DmaDriver.h"
 
 using namespace std;
 using namespace cv;
 
-/*
-     
-*/
-
 // DMA regs base address (set in vivado address editor)
-const unsigned int FAST_BASE_PADDR = 0x40400000;
-const unsigned int GAUS_BASE_PADDR = 0x40410000;
+const unsigned int GAUS_BASE_PADDR = 0x40400000;
+const unsigned int FAST_BASE_PADDR = 0x40410000;
 const unsigned int DESC_BASE_PADDR = 0x40420000;
 
 const unsigned int cntLayers = 4;
@@ -48,10 +44,15 @@ public:
         gaus = DMAChannel(GAUS_BASE_PADDR);
         desc = DMAChannel(DESC_BASE_PADDR);
 
+        // extra 1 byte for pyramid level
         srcBuf = (uchar*)cma_alloc(imgSizeInBytes + 1, 0);
         srcBufPAddr = cma_get_phy_addr((void*)srcBuf);
         dstBuf = (KeypointAndDesc*)cma_alloc(dstBufSizeInBytes, 0);
         dstBufPAddr = cma_get_phy_addr((void*)dstBuf);
+
+        fast.reset();
+        gaus.reset();
+        desc.reset();
 
         fast.startSendChannel();
         gaus.startSendChannel();
@@ -82,15 +83,18 @@ public:
             totalBytesRecvd += bytesRecvd;
         }
 
-        int offsetInBytes = 0;
+        int offsetInKpAndDesc = 0;
         allKpAndDesc.resize(cntLayers);
         for(int i = 0; i < cntLayers; i++) {
             allKpAndDesc[i].resize(cntKeypointsPerLayer[i]);
-            memcpy(&allKpAndDesc[i], dstBuf + offsetInBytes, cntKeypointsPerLayer[i] * sizeof(KeypointAndDesc));
-            // extra 1 for terminating sign
-            offsetInBytes += (cntKeypointsPerLayer[i] + 1) * sizeof(KeypointAndDesc);
+            allKpAndDesc[i] = vector<KeypointAndDesc>(dstBuf + offsetInKpAndDesc, dstBuf + offsetInKpAndDesc + cntKeypointsPerLayer[i]);
+            offsetInKpAndDesc += cntKeypointsPerLayer[i] + 1;
         }
     }
+
+    // ~FPGAORBextractor() {
+    //     fast.destroy();
+    // }
 
 private:
     int imgSizeInBytes, dstBufSizeInBytes;

@@ -59,6 +59,7 @@ src/Tracking.cc
 src/LocalMapping.cc
 src/LoopClosing.cc
 src/fpga/FPGAORBextractor.cc
+include/fpga/FPGAORBextractor.hpp
 src/ORBmatcher.cc
 src/FrameDrawer.cc
 src/Converter.cc
@@ -85,6 +86,8 @@ target_link_libraries(ORB_SLAM2_FPGA
    ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
    ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
    ${PROJECT_SOURCE_DIR}/Thirdparty/OpenCV/lib/libopencv_dnn.so
+   ${PROJECT_SOURCE_DIR}/Thirdparty/cma/lib/libcma.so
+   ${PROJECT_SOURCE_DIR}/lib/libDmaDriver.so
 )
 
 # Build examples
@@ -99,11 +102,23 @@ set(OPENCV_LIBS -lopencv_dnn -lopencv_highgui -lopencv_ml -lopencv_objdetect -lo
                 -lswresample -lswscale -lx264)
 set(CMA_LIBS -lcma -lpthread)
 
+add_library(DmaDriver SHARED
+src/fpga/DmaDriver.cc
+)
+set_target_properties(DmaDriver PROPERTIES COMPILE_FLAGS "-O3")
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
+
 add_executable(rgbd_tum
 Examples/RGB-D/rgbd_tum.cc)
 target_link_libraries(rgbd_tum ${PROJECT_NAME} ${OPENCV_LIBS})
 
+add_executable(rgbd_tum_fpga
+Examples/RGB-D/rgbd_tum_fpga.cc)
+target_link_libraries(rgbd_tum_fpga ORB_SLAM2_FPGA ${OPENCV_LIBS} ${CMA_LIBS})
+
+
+# tests
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/myExample)
 add_executable(orbslam_test ${PROJECT_SOURCE_DIR}/Examples/myExample/orbslam_test.cpp)
 target_link_libraries(orbslam_test ${PROJECT_NAME} ${OPENCV_LIBS})
@@ -115,11 +130,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/cma_test)
 add_executable(cma_test ${PROJECT_SOURCE_DIR}/Examples/cma_test/cma_test.c)
 target_link_libraries(cma_test ${CMA_LIBS})
 
-add_library(DmaDriver SHARED
-src/fpga/DmaDriver.cc
-)
-set_target_properties(DmaDriver PROPERTIES COMPILE_FLAGS "-O3")
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/fpga_orb_test)
 set(CMAKE_xxx_CXX_FLAGS "-O0")
 add_executable(fpga_orb_test_old ./Examples/fpga_orb_test/fpga_orb_test_old.cpp)
@@ -127,6 +137,6 @@ set_target_properties(fpga_orb_test_old PROPERTIES COMPILE_FLAGS ${CMAKE_xxx_CXX
 target_link_libraries(fpga_orb_test_old ${OPENCV_LIBS} ${CMA_LIBS})
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/fpga_orb_test)
-add_executable(fpga_orb_test ./Examples/fpga_orb_test/fpga_orb_test.cpp)
+add_executable(fpga_orb_test ./Examples/fpga_orb_test/fpga_orb_test_2.cpp)
 set_target_properties(fpga_orb_test PROPERTIES COMPILE_FLAGS "-O3")
 target_link_libraries(fpga_orb_test ${OPENCV_LIBS} ${CMA_LIBS} DmaDriver)
