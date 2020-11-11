@@ -8,7 +8,10 @@
 
 #include <opencv/cv.h>
 #include <opencv2/core.hpp>
+
+extern "C" {
 #include "cma/libxlnk_cma.h"
+}
 
 #include "fpga/DmaDriver.h"
 
@@ -25,75 +28,27 @@ const unsigned int cntLayers = 4;
 namespace ORB_SLAM2
 {
     // data struct received from PL
-typedef struct KeypointAndDesc {
-    uint32_t desc[8];   // 256-bit descriptor(already been rotated to main direction)
-    uint32_t posX;      // horizontal coordinate
-    uint32_t posY;      // vertical coordinate
-    uint32_t response;  // response value
-} KeypointAndDesc;
+class KeypointAndDesc {
+public:
+    uint32_t desc[8] = {0};   // 256-bit descriptor(already been rotated to main direction)
+    uint32_t posX = 0;      // horizontal coordinate
+    uint32_t posY = 0;      // vertical coordinate
+    uint32_t response = 0;  // response value
+
+    KeypointAndDesc();
+    KeypointAndDesc(const KeypointAndDesc &kp);
+
+    ~KeypointAndDesc();
+};
 
 class _FPGAORBextractor {
 public:
 
     _FPGAORBextractor() {}
 
-    _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints) {
-        printf("+++++FPGAORBExtractor Constructor+++++\n");
+    _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints);
 
-        this->imgSizeInBytes = imgSizeInBytes;
-        this->dstBufSizeInBytes = maxCntKeypoints * sizeof(KeypointAndDesc);
-
-        fast = DMAChannel(FAST_BASE_PADDR);
-        gaus = DMAChannel(GAUS_BASE_PADDR);
-        desc = DMAChannel(DESC_BASE_PADDR);
-
-        // extra 1 byte for pyramid level
-        srcBuf = (uchar*)cma_alloc(imgSizeInBytes + 1, 0);
-        srcBufPAddr = cma_get_phy_addr((void*)srcBuf);
-        dstBuf = (KeypointAndDesc*)cma_alloc(dstBufSizeInBytes, 0);
-        dstBufPAddr = cma_get_phy_addr((void*)dstBuf);
-
-        fast.reset();
-        gaus.reset();
-        desc.reset();
-
-        fast.startSendChannel();
-        gaus.startSendChannel();
-        desc.startRecvChannel();
-
-        printf("-----FPGAORBExtractor Constructor-----\n");
-    }
-
-    void extract(const Mat &img, vector< vector<KeypointAndDesc> > &allKpAndDesc) {
-        memcpy(srcBuf + 1, (void*)img.data, imgSizeInBytes);
-
-        int bytesRecvd;
-        int totalBytesRecvd = 0;
-        int cntKeypointsPerLayer[4];
-        for(int i = 0; i < 4; i++) {
-            *srcBuf = i;
-
-            desc.recv(dstBufPAddr + totalBytesRecvd, dstBufSizeInBytes);
-            gaus.send(srcBufPAddr, imgSizeInBytes + 1);
-            fast.send(srcBufPAddr, imgSizeInBytes + 1);
-
-            fast.waitforSendDone();
-            gaus.waitforSendDone();
-            desc.waitforRecvDone();
-
-            bytesRecvd = desc.getBytesRecvd();
-            cntKeypointsPerLayer[i] = (bytesRecvd / sizeof(KeypointAndDesc)) - 1;
-            totalBytesRecvd += bytesRecvd;
-        }
-
-        int offsetInKpAndDesc = 0;
-        allKpAndDesc.resize(cntLayers);
-        for(int i = 0; i < cntLayers; i++) {
-            allKpAndDesc[i].resize(cntKeypointsPerLayer[i]);
-            allKpAndDesc[i] = vector<KeypointAndDesc>(dstBuf + offsetInKpAndDesc, dstBuf + offsetInKpAndDesc + cntKeypointsPerLayer[i]);
-            offsetInKpAndDesc += cntKeypointsPerLayer[i] + 1;
-        }
-    }
+    void extract(const Mat &img, vector< vector<KeypointAndDesc> > &allKpAndDesc);
 
     // ~FPGAORBextractor() {
     //     fast.destroy();
@@ -133,6 +88,8 @@ public:
 
     ORBextractor(){}
 
+    ~ORBextractor(){}
+
     // Compute the ORB features and descriptors on an image.
     // ORB are dispersed on the image using an octree.
     // Mask is ignored in the current implementation.
@@ -170,9 +127,14 @@ protected:
 
     void ComputeKeyPointsOctTree(vector<std::vector<KeypointAndDesc> >& allKeypointsAndDesc, 
                                  vector< vector<KeypointAndDesc> >& resultKeypointsAndDesc);    
-    std::vector<KeypointAndDesc> DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
+    vector<KeypointAndDesc> DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
                                                    const int &minX, const int &maxX, const int &minY, const int &maxY,
                                                    const int &nFeatures, const int &level);
+    void DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
+                           const int &minX, const int &maxX, const int &minY, const int &maxY,
+                           const int &nFeatures, const int &level, vector<KeypointAndDesc> &vResultKeys);
+    
+    void ComputePyramid(cv::Mat image);
 
     int nfeatures;
     double scaleFactor;

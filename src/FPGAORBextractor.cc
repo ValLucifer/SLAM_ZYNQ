@@ -73,12 +73,91 @@ const int PATCH_SIZE = 31;
 const int HALF_PATCH_SIZE = 15;
 const int EDGE_THRESHOLD = 19;
 
+
+KeypointAndDesc::KeypointAndDesc() {}
+KeypointAndDesc::KeypointAndDesc(const KeypointAndDesc & kp) {
+    // printf("copy constructor called\n");
+    for(int i = 0; i < 8; i++)
+        this->desc[i] = kp.desc[i];
+    this->posX = kp.posX;
+    this->posY = kp.posY;
+    this->response = kp.response;
+}
+KeypointAndDesc::~KeypointAndDesc() {
+    // printf("destructor called\n");
+}
+
+_FPGAORBextractor::_FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints) {
+    printf("+++++FPGAORBExtractor Constructor+++++\n");
+
+    this->imgSizeInBytes = imgSizeInBytes;
+    this->dstBufSizeInBytes = maxCntKeypoints * sizeof(KeypointAndDesc);
+
+    fast = DMAChannel(FAST_BASE_PADDR);
+    gaus = DMAChannel(GAUS_BASE_PADDR);
+    desc = DMAChannel(DESC_BASE_PADDR);
+
+    // extra 1 byte for pyramid level
+    srcBuf = (uchar*)cma_alloc(imgSizeInBytes + 1, 0);
+    srcBufPAddr = cma_get_phy_addr((void*)srcBuf);
+    dstBuf = (KeypointAndDesc*)cma_alloc(dstBufSizeInBytes, 0);
+    dstBufPAddr = cma_get_phy_addr((void*)dstBuf);
+    printf("srcBuf: %x, srcBufPAddr: %x\n", srcBuf, srcBufPAddr);
+    printf("dstBuf: %x, dstBufPAddr: %x\n", dstBuf, dstBufPAddr);
+
+    fast.reset();
+    gaus.reset();
+    desc.reset();
+
+    fast.startSendChannel();
+    gaus.startSendChannel();
+    desc.startRecvChannel();
+
+    printf("-----FPGAORBExtractor Constructor-----\n");
+}
+
+void _FPGAORBextractor::extract(const Mat &img, vector< vector<KeypointAndDesc> > &allKpAndDesc) {
+    // printf("extract!\n");
+    memcpy(srcBuf + 1, (void*)img.data, imgSizeInBytes);
+
+    int bytesRecvd;
+    int totalBytesRecvd = 0;
+    int cntKeypointsPerLayer[4];
+    for(int i = 0; i < 4; i++) {
+        *srcBuf = i;
+
+        desc.recv(dstBufPAddr + totalBytesRecvd, dstBufSizeInBytes);
+        gaus.send(srcBufPAddr, imgSizeInBytes + 1);
+        fast.send(srcBufPAddr, imgSizeInBytes + 1);
+
+        fast.waitforSendDone();
+        gaus.waitforSendDone();
+        desc.waitforRecvDone();
+
+        bytesRecvd = desc.getBytesRecvd();
+        cntKeypointsPerLayer[i] = (bytesRecvd / sizeof(KeypointAndDesc)) - 1;
+        totalBytesRecvd += bytesRecvd;
+
+        // printf("received %d bytes in layer %d\n", bytesRecvd, i);
+    }
+
+    int offsetInKpAndDesc = 0;
+    allKpAndDesc.resize(cntLayers);
+    for(int i = 0; i < cntLayers; i++) {
+        allKpAndDesc[i].resize(cntKeypointsPerLayer[i]);
+        allKpAndDesc[i] = vector<KeypointAndDesc>(dstBuf + offsetInKpAndDesc, dstBuf + offsetInKpAndDesc + cntKeypointsPerLayer[i]);
+        offsetInKpAndDesc += cntKeypointsPerLayer[i] + 1;
+    }
+}
+
 ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
          int _iniThFAST, int _minThFAST):
     nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels),
     iniThFAST(_iniThFAST), minThFAST(_minThFAST)
 {
     _fpgaORBextractor = _FPGAORBextractor(640 * 480, 8192);
+    printf("+++++ORBextractor constructor+++++\n");
+    printf("nfeatures: %d, scaleFactor: %.1f, nlevels: %d\n", nfeatures, scaleFactor, nlevels);
 
     mvScaleFactor.resize(nlevels);
     mvLevelSigma2.resize(nlevels);
@@ -112,6 +191,8 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
         nDesiredFeaturesPerScale *= factor;
     }
     mnFeaturesPerLevel[nlevels-1] = std::max(nfeatures - sumFeatures, 0);
+
+    printf("-----ORBextractor constructor-----\n");
 }
 
 void ExtractorNode::DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNode &n3, ExtractorNode &n4)
@@ -175,6 +256,10 @@ void ExtractorNode::DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNo
 vector<KeypointAndDesc> ORBextractor::DistributeOctTree(const vector<KeypointAndDesc>& vToDistributeKeyAndDescs, const int &minX,
                                        const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
 {
+    printf("layer: %d, toDistKp size: %d\n", level, vToDistributeKeyAndDescs.size());
+    printf("target kp cnt: %d\n", N);
+    printf("minX: %d, maxX: %d, minY: %d, maxY: %d\n", minX, maxX, minY, maxY);
+
     // Compute how many initial nodes   
     const int nIni = round(static_cast<float>(maxX-minX)/(maxY-minY));
 
@@ -198,12 +283,21 @@ vector<KeypointAndDesc> ORBextractor::DistributeOctTree(const vector<KeypointAnd
         vpIniNodes[i] = &lNodes.back();
     }
 
+    printf("1\n");
+    printf("%d\n", vToDistributeKeyAndDescs.size());
+    printf("%d\n", vpIniNodes.size());
+    printf("%f\n", hX);
+
     //Associate points to childs
     for(size_t i=0;i<vToDistributeKeyAndDescs.size();i++)
     {
         const KeypointAndDesc &kpAndDesc = vToDistributeKeyAndDescs[i];
-        vpIniNodes[kpAndDesc.posX/hX]->vKeys.push_back(kpAndDesc);
+        // printf("%d %d %f %f\n", i, kpAndDesc.posX, hX, kpAndDesc.posX/hX);
+        if(kpAndDesc.posX/hX < vpIniNodes.size())
+            vpIniNodes[kpAndDesc.posX/hX]->vKeys.push_back(kpAndDesc);
     }
+
+    printf("2\n");
 
     list<ExtractorNode>::iterator lit = lNodes.begin();
 
@@ -219,6 +313,263 @@ vector<KeypointAndDesc> ORBextractor::DistributeOctTree(const vector<KeypointAnd
         else
             lit++;
     }
+
+    printf("3\n");
+
+    bool bFinish = false;
+
+    int iteration = 0;
+
+    vector<pair<int,ExtractorNode*> > vSizeAndPointerToNode;
+    vSizeAndPointerToNode.reserve(lNodes.size()*4);
+
+    while(!bFinish)
+    {
+        iteration++;
+
+        int prevSize = lNodes.size();
+
+        lit = lNodes.begin();
+
+        int nToExpand = 0;
+
+        vSizeAndPointerToNode.clear();
+
+        while(lit!=lNodes.end())
+        {
+            if(lit->bNoMore)
+            {
+                // If node only contains one point do not subdivide and continue
+                lit++;
+                continue;
+            }
+            else
+            {
+                // If more than one point, subdivide
+                ExtractorNode n1,n2,n3,n4;
+                lit->DivideNode(n1,n2,n3,n4);
+
+                // Add childs if they contain points
+                if(n1.vKeys.size()>0)
+                {
+                    lNodes.push_front(n1);                    
+                    if(n1.vKeys.size()>1)
+                    {
+                        nToExpand++;
+                        vSizeAndPointerToNode.push_back(make_pair(n1.vKeys.size(),&lNodes.front()));
+                        lNodes.front().lit = lNodes.begin();
+                    }
+                }
+                if(n2.vKeys.size()>0)
+                {
+                    lNodes.push_front(n2);
+                    if(n2.vKeys.size()>1)
+                    {
+                        nToExpand++;
+                        vSizeAndPointerToNode.push_back(make_pair(n2.vKeys.size(),&lNodes.front()));
+                        lNodes.front().lit = lNodes.begin();
+                    }
+                }
+                if(n3.vKeys.size()>0)
+                {
+                    lNodes.push_front(n3);
+                    if(n3.vKeys.size()>1)
+                    {
+                        nToExpand++;
+                        vSizeAndPointerToNode.push_back(make_pair(n3.vKeys.size(),&lNodes.front()));
+                        lNodes.front().lit = lNodes.begin();
+                    }
+                }
+                if(n4.vKeys.size()>0)
+                {
+                    lNodes.push_front(n4);
+                    if(n4.vKeys.size()>1)
+                    {
+                        nToExpand++;
+                        vSizeAndPointerToNode.push_back(make_pair(n4.vKeys.size(),&lNodes.front()));
+                        lNodes.front().lit = lNodes.begin();
+                    }
+                }
+
+                lit=lNodes.erase(lit);
+                continue;
+            }
+        }       
+
+        printf("4\n");
+
+        // Finish if there are more nodes than required features
+        // or all nodes contain just one point
+        if((int)lNodes.size()>=N || (int)lNodes.size()==prevSize)
+        {
+            bFinish = true;
+        }
+        else if(((int)lNodes.size()+nToExpand*3)>N)
+        {
+
+            while(!bFinish)
+            {
+
+                prevSize = lNodes.size();
+
+                vector<pair<int,ExtractorNode*> > vPrevSizeAndPointerToNode = vSizeAndPointerToNode;
+                vSizeAndPointerToNode.clear();
+
+                sort(vPrevSizeAndPointerToNode.begin(),vPrevSizeAndPointerToNode.end());
+                for(int j=vPrevSizeAndPointerToNode.size()-1;j>=0;j--)
+                {
+                    ExtractorNode n1,n2,n3,n4;
+                    vPrevSizeAndPointerToNode[j].second->DivideNode(n1,n2,n3,n4);
+
+                    // Add childs if they contain points
+                    if(n1.vKeys.size()>0)
+                    {
+                        lNodes.push_front(n1);
+                        if(n1.vKeys.size()>1)
+                        {
+                            vSizeAndPointerToNode.push_back(make_pair(n1.vKeys.size(),&lNodes.front()));
+                            lNodes.front().lit = lNodes.begin();
+                        }
+                    }
+                    if(n2.vKeys.size()>0)
+                    {
+                        lNodes.push_front(n2);
+                        if(n2.vKeys.size()>1)
+                        {
+                            vSizeAndPointerToNode.push_back(make_pair(n2.vKeys.size(),&lNodes.front()));
+                            lNodes.front().lit = lNodes.begin();
+                        }
+                    }
+                    if(n3.vKeys.size()>0)
+                    {
+                        lNodes.push_front(n3);
+                        if(n3.vKeys.size()>1)
+                        {
+                            vSizeAndPointerToNode.push_back(make_pair(n3.vKeys.size(),&lNodes.front()));
+                            lNodes.front().lit = lNodes.begin();
+                        }
+                    }
+                    if(n4.vKeys.size()>0)
+                    {
+                        lNodes.push_front(n4);
+                        if(n4.vKeys.size()>1)
+                        {
+                            vSizeAndPointerToNode.push_back(make_pair(n4.vKeys.size(),&lNodes.front()));
+                            lNodes.front().lit = lNodes.begin();
+                        }
+                    }
+
+                    lNodes.erase(vPrevSizeAndPointerToNode[j].second->lit);
+
+                    if((int)lNodes.size()>=N)
+                        break;
+                }
+
+                if((int)lNodes.size()>=N || (int)lNodes.size()==prevSize)
+                    bFinish = true;
+
+            }
+        }
+    }
+
+    printf("5\n");
+
+    // Retain the best point in each node
+    vector<KeypointAndDesc> vResultKeys;
+    vResultKeys.reserve(nfeatures);
+    // int i = 0;
+    for(list<ExtractorNode>::iterator lit=lNodes.begin(); lit!=lNodes.end(); lit++)
+    {
+        // printf("\t%d\n", i++);
+        vector<KeypointAndDesc> &vNodeKeys = lit->vKeys;
+        KeypointAndDesc* pKP = &vNodeKeys[0];
+        float maxResponse = pKP->response;
+
+        int bestIdx = 0;
+        for(size_t k=1;k<vNodeKeys.size();k++)
+        {
+            if(vNodeKeys[k].response>maxResponse)
+            {
+                bestIdx = k;
+                maxResponse = vNodeKeys[k].response;
+            }
+        }
+
+        // printf("\t%d\n", bestIdx);
+        // printf("\t%d %d %d\n", vNodeKeys[bestIdx].posX, vNodeKeys[bestIdx].posY, vNodeKeys[bestIdx].response);
+        // printf("\t%d\n", vResultKeys.size());
+        vResultKeys.push_back(vNodeKeys[bestIdx]);
+    }
+
+    printf("6\n");
+    printf("%d kps in vResultKeys\n", vResultKeys.size());
+
+    return vResultKeys;
+}
+
+void ORBextractor::DistributeOctTree(const vector<KeypointAndDesc>& vToDistributeKeyAndDescs, const int &minX,
+                                     const int &maxX, const int &minY, const int &maxY, const int &N, const int &level,
+                                     vector<KeypointAndDesc> & vResultKeys)
+{
+    // printf("layer: %d, toDistKp size: %d\n", level, vToDistributeKeyAndDescs.size());
+    // printf("target kp cnt: %d\n", N);
+    // printf("minX: %d, maxX: %d, minY: %d, maxY: %d\n", minX, maxX, minY, maxY);
+
+    // Compute how many initial nodes   
+    const int nIni = round(static_cast<float>(maxX-minX)/(maxY-minY));
+
+    const float hX = static_cast<float>(maxX-minX)/nIni;
+
+    list<ExtractorNode> lNodes;
+
+    vector<ExtractorNode*> vpIniNodes;
+    vpIniNodes.resize(nIni);
+
+    for(int i=0; i<nIni; i++)
+    {
+        ExtractorNode ni;
+        ni.UL = cv::Point2i(hX*static_cast<float>(i),0);
+        ni.UR = cv::Point2i(hX*static_cast<float>(i+1),0);
+        ni.BL = cv::Point2i(ni.UL.x,maxY-minY);
+        ni.BR = cv::Point2i(ni.UR.x,maxY-minY);
+        ni.vKeys.reserve(vToDistributeKeyAndDescs.size());
+
+        lNodes.push_back(ni);
+        vpIniNodes[i] = &lNodes.back();
+    }
+
+    // printf("1\n");
+    // printf("\t%d\n", vToDistributeKeyAndDescs.size());
+    // printf("\t%d\n", vpIniNodes.size());
+    // printf("\t%f\n", hX);
+
+    //Associate points to childs
+    for(size_t i=0;i<vToDistributeKeyAndDescs.size();i++)
+    {
+        const KeypointAndDesc &kpAndDesc = vToDistributeKeyAndDescs[i];
+        // printf("%d %d %f %f\n", i, kpAndDesc.posX, hX, kpAndDesc.posX/hX);
+        if(kpAndDesc.posX/hX < vpIniNodes.size())
+            vpIniNodes[kpAndDesc.posX/hX]->vKeys.push_back(kpAndDesc);
+    }
+
+    // printf("2\n");
+
+    list<ExtractorNode>::iterator lit = lNodes.begin();
+
+    while(lit!=lNodes.end())
+    {
+        if(lit->vKeys.size()==1)
+        {
+            lit->bNoMore=true;
+            lit++;
+        }
+        else if(lit->vKeys.empty())
+            lit = lNodes.erase(lit);
+        else
+            lit++;
+    }
+
+    // printf("3\n");
 
     bool bFinish = false;
 
@@ -374,28 +725,39 @@ vector<KeypointAndDesc> ORBextractor::DistributeOctTree(const vector<KeypointAnd
         }
     }
 
+    // printf("4\n");
+
     // Retain the best point in each node
-    vector<KeypointAndDesc> vResultKeys;
+    // vResultKeys.clear();
     vResultKeys.reserve(nfeatures);
+
+    // printf("5\n");
     for(list<ExtractorNode>::iterator lit=lNodes.begin(); lit!=lNodes.end(); lit++)
     {
         vector<KeypointAndDesc> &vNodeKeys = lit->vKeys;
+        // printf("\t%d\n", vNodeKeys.size());
         KeypointAndDesc* pKP = &vNodeKeys[0];
         float maxResponse = pKP->response;
 
+        int bestIdx = 0;
         for(size_t k=1;k<vNodeKeys.size();k++)
         {
+            // printf("%d\n", k);
             if(vNodeKeys[k].response>maxResponse)
             {
-                pKP = &vNodeKeys[k];
+                bestIdx = k;
                 maxResponse = vNodeKeys[k].response;
             }
         }
 
-        vResultKeys.push_back(*pKP);
+        // printf("\t%d\n", bestIdx);
+        // printf("\t%d %d %d\n", vNodeKeys[bestIdx].posX, vNodeKeys[bestIdx].posY, vNodeKeys[bestIdx].response);
+        // printf("\t%d\n", vResultKeys.size());
+        vResultKeys.push_back(vNodeKeys[bestIdx]);
     }
 
-    return vResultKeys;
+    // printf("6\n");
+    // printf("%d kps in vResultKeys\n", vResultKeys.size());
 }
 
 void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >& allKeypointAndDescs,
@@ -404,33 +766,42 @@ void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >& all
 
     const float W = 30;
 
-    distributedKeypointAndDescs.reserve(nlevels);
+    const int imagePyramidCols[4] = {640, 320, 160, 80};
+    const int imagePyramidRows[4] = {480, 240, 120, 60}; 
+
+    distributedKeypointAndDescs.resize(nlevels);
     for (int level = 0; level < nlevels; ++level)
     {
         const int minBorderX = EDGE_THRESHOLD-3;
         const int minBorderY = minBorderX;
-        const int maxBorderX = mvImagePyramid[level].cols-EDGE_THRESHOLD+3;
-        const int maxBorderY = mvImagePyramid[level].rows-EDGE_THRESHOLD+3;
+        const int maxBorderX = imagePyramidCols[level]-EDGE_THRESHOLD+3;
+        const int maxBorderY = imagePyramidRows[level]-EDGE_THRESHOLD+3;
+        // const int maxBorderX = mvImagePyramid[level].cols-EDGE_THRESHOLD+3;
+        // const int maxBorderY = mvImagePyramid[level].rows-EDGE_THRESHOLD+3;
 
         vector<KeypointAndDesc> &vToDistributeKeypointAndDescs = allKeypointAndDescs[level];
 
         vector<KeypointAndDesc> & layerKeypointAndDescs = distributedKeypointAndDescs[level];
-        layerKeypointAndDescs.reserve(nfeatures);
+        // distributedKeypointAndDescs[level].reserve(nfeatures);
 
-        layerKeypointAndDescs = DistributeOctTree(vToDistributeKeypointAndDescs, minBorderX, maxBorderX,
-                                                  minBorderY, maxBorderY,mnFeaturesPerLevel[level], level);
+        // printf("layer %d distribute starts\n", level);
+        // distributedKeypointAndDescs[level] = DistributeOctTree(vToDistributeKeypointAndDescs, minBorderX, maxBorderX,
+        //                                           minBorderY, maxBorderY, mnFeaturesPerLevel[level], level);
+        DistributeOctTree(vToDistributeKeypointAndDescs, minBorderX, maxBorderX,
+                          minBorderY, maxBorderY, mnFeaturesPerLevel[level], level, distributedKeypointAndDescs[level]);
+        // printf("layer %d distribute done, %d keypoints remain.\n", level, distributedKeypointAndDescs[level].size());
 
         const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
 
         // Add border to coordinates and scale information
-        const int nkps = layerKeypointAndDescs.size();
-        for(int i=0; i<nkps ; i++)
-        {
-            layerKeypointAndDescs[i].posX+=minBorderX;
-            layerKeypointAndDescs[i].posY+=minBorderY;
-            // layerKeypointAndDescs[i].octave=level;
-            // layerKeypointAndDescs[i].size = scaledPatchSize;
-        }
+        // const int nkps = distributedKeypointAndDescs[level].size();
+        // for(int i=0; i<nkps ; i++)
+        // {
+        //     // distributedKeypointAndDescs[level][i].posX+=minBorderX;
+        //     // distributedKeypointAndDescs[level][i].posY+=minBorderY;
+        //     // layerKeypointAndDescs[i].octave=level;
+        //     // layerKeypointAndDescs[i].size = scaledPatchSize;
+        // }
     }
 }
 
@@ -443,11 +814,32 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
     Mat image = _image.getMat();
     assert(image.type() == CV_8UC1 );
 
+    // Pre-compute the scale pyramid
+    ComputePyramid(image);
+
     vector< vector<KeypointAndDesc> > allKeypointAndDescs;
+    // allKeypointAndDescs.resize(cntLayers);
     _fpgaORBextractor.extract(image, allKeypointAndDescs);
+
+    // printf("extract done\n");
+    // for(int i = 0; i < cntLayers; i++) {
+    //     printf("Layer %d:\n", i);
+    //     printf("%d keypoints\n", allKeypointAndDescs[i].size());
+    //     for(int j = 0; j < 10; j++) {
+    //         KeypointAndDesc &curKeypointAndDesc = allKeypointAndDescs[i][allKeypointAndDescs[i].size()-1-j];
+    //         printf("\tKP %d:\n", j);
+    //         printf("\t\tDescriptor: ");
+    //         for(int k = 0; k < 8; k++)
+    //             printf("%d ", curKeypointAndDesc.desc[k]);
+    //         printf("\n");
+    //         printf("\t\tposX: %d, posY: %d\n", curKeypointAndDesc.posX, curKeypointAndDesc.posY);
+    //         printf("\t\tresponse: %d\n", curKeypointAndDesc.response);
+    //     }
+    // }
 
     vector < vector<KeypointAndDesc> > distributedKeypointAndDescs;
     ComputeKeyPointsOctTree(allKeypointAndDescs, distributedKeypointAndDescs);
+    // printf("octtree distribute done\n");
     //ComputeKeyPointsOld(allKeypoints);
 
     Mat descriptors;
@@ -466,9 +858,12 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
     _keypoints.clear();
     _keypoints.reserve(nkeypoints);
 
+    // printf("start to record descriptors\n");
     int offset = 0;
     for (int level = 0; level < nlevels; ++level)
     {
+        // printf("layer: %d\n", level);
+
         vector<KeypointAndDesc>& keypoints = distributedKeypointAndDescs[level];
         int nkeypointsLevel = (int)keypoints.size();
 
@@ -486,24 +881,54 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
                 pCurDescriptor[j] = ((uchar*)keypoints[i].desc)[j];
         }
 
+        // printf("layer descriptor done\n");
+
         offset += nkeypointsLevel;
 
-        // Scale keypoint coordinates
-        if (level != 0)
-        {
-            float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
-            for (vector<KeypointAndDesc>::iterator keypoint = keypoints.begin(),
-                 keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint) {
-                // keypoint->posX *= scale;
-                // keypoint->posY *= scale;
 
-                _keypoints.push_back(cv::KeyPoint(keypoint->posX*scale, keypoint->posY*scale, 
-                                                  PATCH_SIZE*scale, keypoint->response, level));
-            }
+        // Scale keypoint coordinates
+        float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
+        for (vector<KeypointAndDesc>::iterator keypoint = keypoints.begin(),
+                keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint) {
+            int oriPosX = keypoint->posX*scale;
+            int oriPosY = keypoint->posY*scale;
+            if(0 <= oriPosX && oriPosX < 640 && 0 <= oriPosY && oriPosY < 480)
+                _keypoints.push_back(cv::KeyPoint(oriPosX, oriPosY, PATCH_SIZE*scale, keypoint->response, level));
         }
         // And add the keypoints to the output
         // _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
     }
+
+    // printf("ORBextractor operator () done\n");
+    // printf("\t%d\n", _keypoints.size());
+    // printf("\t%d %d\n", _descriptors.getMat().rows, _descriptors.getMat().cols);
+}
+
+void ORBextractor::ComputePyramid(cv::Mat image)
+{
+    for (int level = 0; level < nlevels; ++level)
+    {
+        float scale = mvInvScaleFactor[level];
+        Size sz(cvRound((float)image.cols*scale), cvRound((float)image.rows*scale));
+        Size wholeSize(sz.width + EDGE_THRESHOLD*2, sz.height + EDGE_THRESHOLD*2);
+        Mat temp(wholeSize, image.type()), masktemp;
+        mvImagePyramid[level] = temp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
+
+        // Compute the resized image
+        if( level != 0 )
+        {
+            resize(mvImagePyramid[level-1], mvImagePyramid[level], sz, 0, 0, INTER_LINEAR);
+
+            copyMakeBorder(mvImagePyramid[level], temp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
+                           BORDER_REFLECT_101+BORDER_ISOLATED);            
+        }
+        else
+        {
+            copyMakeBorder(image, temp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
+                           BORDER_REFLECT_101);            
+        }
+    }
+
 }
 
 } //namespace ORB_SLAM
