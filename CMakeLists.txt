@@ -1,9 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
-project(ORB_SLAM2)
+project(ORB_SLAM2_FPGA)
 
-IF(NOT CMAKE_BUILD_TYPE)
-  SET(CMAKE_BUILD_TYPE Debug)
-ENDIF()
+SET(CMAKE_BUILD_TYPE Release)
+
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
@@ -87,10 +86,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 
 # add_executable(rgbd_tum
 # Examples/RGB-D/rgbd_tum.cc)
-# target_link_libraries(rgbd_tum ${PROJECT_NAME} ${OPENCV_LIBS})
+# target_link_libraries(rgbd_tum ${PROJECT_SOURCE_DIR}/lib/libORBSLAM2.so ${OPENCV_LIBS})
 
 add_executable(rgbd_tum_fpga
-Examples/RGB-D/rgbd_tum_fpga.cc)
+Examples/RGB-D/rgbd_tum.cc)
 target_link_libraries(rgbd_tum_fpga ORB_SLAM2_FPGA ${OPENCV_LIBS})
 
 

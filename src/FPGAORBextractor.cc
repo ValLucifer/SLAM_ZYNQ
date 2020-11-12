@@ -87,11 +87,14 @@ KeypointAndDesc::~KeypointAndDesc() {
     // printf("destructor called\n");
 }
 
-_FPGAORBextractor::_FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints) {
+_FPGAORBextractor::_FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints, int nlevels, float scaleFactor) {
     printf("+++++FPGAORBExtractor Constructor+++++\n");
+    printf("nLevels: %d\n", nlevels);
 
     this->imgSizeInBytes = imgSizeInBytes;
     this->dstBufSizeInBytes = maxCntKeypoints * sizeof(KeypointAndDesc);
+    this->nlevels = nlevels;
+    this->scaleFactor = scaleFactor;
 
     fast = DMAChannel(FAST_BASE_PADDR);
     gaus = DMAChannel(GAUS_BASE_PADDR);
@@ -122,8 +125,8 @@ void _FPGAORBextractor::extract(const Mat &img, vector< vector<KeypointAndDesc> 
 
     int bytesRecvd;
     int totalBytesRecvd = 0;
-    int cntKeypointsPerLayer[4];
-    for(int i = 0; i < 4; i++) {
+    vector<int> cntKeypointsPerLayer(nlevels);
+    for(int i = 0; i < nlevels; i++) {
         *srcBuf = i;
 
         desc.recv(dstBufPAddr + totalBytesRecvd, dstBufSizeInBytes);
@@ -142,8 +145,8 @@ void _FPGAORBextractor::extract(const Mat &img, vector< vector<KeypointAndDesc> 
     }
 
     int offsetInKpAndDesc = 0;
-    allKpAndDesc.resize(cntLayers);
-    for(int i = 0; i < cntLayers; i++) {
+    allKpAndDesc.resize(nlevels);
+    for(int i = 0; i < nlevels; i++) {
         allKpAndDesc[i].resize(cntKeypointsPerLayer[i]);
         allKpAndDesc[i] = vector<KeypointAndDesc>(dstBuf + offsetInKpAndDesc, dstBuf + offsetInKpAndDesc + cntKeypointsPerLayer[i]);
         offsetInKpAndDesc += cntKeypointsPerLayer[i] + 1;
@@ -155,7 +158,7 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
     nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels),
     iniThFAST(_iniThFAST), minThFAST(_minThFAST)
 {
-    _fpgaORBextractor = _FPGAORBextractor(640 * 480, 8192);
+    _fpgaORBextractor = _FPGAORBextractor(640 * 480, 8192, nlevels, scaleFactor);
     printf("+++++ORBextractor constructor+++++\n");
     printf("nfeatures: %d, scaleFactor: %.1f, nlevels: %d\n", nfeatures, scaleFactor, nlevels);
 
@@ -774,10 +777,8 @@ void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >& all
     {
         const int minBorderX = EDGE_THRESHOLD-3;
         const int minBorderY = minBorderX;
-        const int maxBorderX = imagePyramidCols[level]-EDGE_THRESHOLD+3;
-        const int maxBorderY = imagePyramidRows[level]-EDGE_THRESHOLD+3;
-        // const int maxBorderX = mvImagePyramid[level].cols-EDGE_THRESHOLD+3;
-        // const int maxBorderY = mvImagePyramid[level].rows-EDGE_THRESHOLD+3;
+        const int maxBorderX = mvImagePyramid[level].cols-EDGE_THRESHOLD+3;
+        const int maxBorderY = mvImagePyramid[level].rows-EDGE_THRESHOLD+3;
 
         vector<KeypointAndDesc> &vToDistributeKeypointAndDescs = allKeypointAndDescs[level];
 

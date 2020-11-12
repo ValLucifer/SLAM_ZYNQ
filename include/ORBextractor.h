@@ -23,8 +23,6 @@ const unsigned int GAUS_BASE_PADDR = 0x40400000;
 const unsigned int FAST_BASE_PADDR = 0x40410000;
 const unsigned int DESC_BASE_PADDR = 0x40420000;
 
-const unsigned int cntLayers = 4;
-
 namespace ORB_SLAM2
 {
     // data struct received from PL
@@ -45,8 +43,8 @@ class _FPGAORBextractor {
 public:
 
     _FPGAORBextractor() {}
-
-    _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints);
+    // _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints);
+    _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints, int nLevels, float factor);
 
     void extract(const Mat &img, vector< vector<KeypointAndDesc> > &allKpAndDesc);
 
@@ -56,6 +54,8 @@ public:
 
 private:
     int imgSizeInBytes, dstBufSizeInBytes;
+    int nlevels;
+    float scaleFactor;
 
     DMAChannel fast, gaus, desc;
 

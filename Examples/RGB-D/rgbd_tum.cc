@@ -36,9 +36,9 @@ void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageF
 
 int main(int argc, char **argv)
 {
-    if(argc != 5)
+    if(argc != 6)
     {
-        cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
+        cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association path_to_save_trajectory" << endl;
         return 1;
     }
 
@@ -135,8 +135,11 @@ int main(int argc, char **argv)
     cout << "mean tracking time: " << totaltime/nImages << endl;
 
     // Save camera trajectory
-    SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");   
+    string pathToSaveTrajectory(argv[5]);
+    if(*(pathToSaveTrajectory.end()) != '\\')
+        pathToSaveTrajectory += '\\';
+    SLAM.SaveTrajectoryTUM(pathToSaveTrajectory + "CameraTrajectory.txt");
+    SLAM.SaveKeyFrameTrajectoryTUM(pathToSaveTrajectory + "KeyFrameTrajectory.txt");   
 
     return 0;
 }
