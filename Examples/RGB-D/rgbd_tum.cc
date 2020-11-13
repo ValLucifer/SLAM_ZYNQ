@@ -136,8 +136,8 @@ int main(int argc, char **argv)
 
     // Save camera trajectory
     string pathToSaveTrajectory(argv[5]);
-    if(*(pathToSaveTrajectory.end()) != '\\')
-        pathToSaveTrajectory += '\\';
+    if(*(pathToSaveTrajectory.end()) != '/')
+        pathToSaveTrajectory += '/';
     SLAM.SaveTrajectoryTUM(pathToSaveTrajectory + "CameraTrajectory.txt");
     SLAM.SaveKeyFrameTrajectoryTUM(pathToSaveTrajectory + "KeyFrameTrajectory.txt");   
 
