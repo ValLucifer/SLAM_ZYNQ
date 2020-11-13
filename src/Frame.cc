@@ -120,6 +120,8 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     :mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
      mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth)
 {
+    // printf("+++++Frame constructor+++++\n");
+
     // Frame ID
     mnId=nNextId++;
 
@@ -134,6 +136,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
 
     // ORB extraction
     ExtractORB(0,imGray);
+    // printf("ORB extracted, %d points\n", mvKeys.size());
 
     N = mvKeys.size();
 
@@ -141,8 +144,11 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
         return;
 
     UndistortKeyPoints();
+    // printf("undistorted points\n");
 
     ComputeStereoFromRGBD(imDepth);
+    // printf("%d %d\n", imDepth.rows, imDepth.cols);
+    // printf("computed sterero from rgbd\n");
 
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
     mvbOutlier = vector<bool>(N,false);

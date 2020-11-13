@@ -1,34 +1,67 @@
-/**
-* This file is part of ORB-SLAM2.
-*
-* Copyright (C) 2014-2016 Raúl Mur-Artal <raulmur at unizar dot es> (University of Zaragoza)
-* For more information see <https://github.com/raulmur/ORB_SLAM2>
-*
-* ORB-SLAM2 is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* ORB-SLAM2 is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
-*/
-
 #ifndef ORBEXTRACTOR_H
 #define ORBEXTRACTOR_H
 
+#include <cstdio>
+#include <cstring>
 #include <vector>
 #include <list>
+
 #include <opencv/cv.h>
+#include <opencv2/core.hpp>
+
+extern "C" {
+#include "cma/libxlnk_cma.h"
+}
+
+#include "fpga/DmaDriver.h"
 
 #include <chrono>
+using namespace std;
+using namespace cv;
+
+// DMA regs base address (set in vivado address editor)
+const unsigned int GAUS_BASE_PADDR = 0x40400000;
+const unsigned int FAST_BASE_PADDR = 0x40410000;
+const unsigned int DESC_BASE_PADDR = 0x40420000;
 
 namespace ORB_SLAM2
 {
+    // data struct received from PL
+class KeypointAndDesc {
+public:
+    uint32_t desc[8] = {0};   // 256-bit descriptor(already been rotated to main direction)
+    uint32_t posX = 0;      // horizontal coordinate
+    uint32_t posY = 0;      // vertical coordinate
+    uint32_t response = 0;  // response value
+
+    KeypointAndDesc();
+    KeypointAndDesc(const KeypointAndDesc &kp);
+
+    ~KeypointAndDesc();
+};
+
+class _FPGAORBextractor {
+public:
+
+    _FPGAORBextractor() {}
+    _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints, int nLevels, float factor);
+
+    void extract(const Mat &img, vector< vector<KeypointAndDesc> > &allKpAndDesc);
+
+    void printProfileInfo();
+private:
+    int imgSizeInBytes, dstBufSizeInBytes;
+    int nlevels;
+    float scaleFactor;
+
+    DMAChannel fast, gaus, desc;
+
+    uchar *srcBuf;
+    KeypointAndDesc *dstBuf;
+    unsigned long srcBufPAddr, dstBufPAddr;
+
+    vector<double> timeCopyImgToCmaBuffer, timeOnFpga, timeCopyResFromCmaBuffer;
+};
 
 class ExtractorNode
 {
@@ -37,7 +70,7 @@ public:
 
     void DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNode &n3, ExtractorNode &n4);
 
-    std::vector<cv::KeyPoint> vKeys;
+    std::vector<KeypointAndDesc> vKeys;
     cv::Point2i UL, UR, BL, BR;
     std::list<ExtractorNode>::iterator lit;
     bool bNoMore;
@@ -47,10 +80,12 @@ class ORBextractor
 {
 public:
     
-    enum {HARRIS_SCORE=0, FAST_SCORE=1 };
+    enum { HARRIS_SCORE=0, FAST_SCORE=1 };
 
     ORBextractor(int nfeatures, float scaleFactor, int nlevels,
                  int iniThFAST, int minThFAST);
+
+    ORBextractor(){}
 
     ~ORBextractor(){}
 
@@ -88,15 +123,23 @@ public:
     std::vector<cv::Mat> mvImagePyramid;
     std::vector<double> timeTotal;
 
+    void printProfileInfo();
+
+
 protected:
 
-    void ComputePyramid(cv::Mat image);
-    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);    
-    std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
-                                           const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
+    _FPGAORBextractor _fpgaORBextractor;
 
-    void ComputeKeyPointsOld(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
-    std::vector<cv::Point> pattern;
+    void ComputeKeyPointsOctTree(vector<std::vector<KeypointAndDesc> >& allKeypointsAndDesc, 
+                                 vector< vector<KeypointAndDesc> >& resultKeypointsAndDesc);    
+    vector<KeypointAndDesc> DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
+                                                   const int &minX, const int &maxX, const int &minY, const int &maxY,
+                                                   const int &nFeatures, const int &level);
+    void DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
+                           const int &minX, const int &maxX, const int &minY, const int &maxY,
+                           const int &nFeatures, const int &level, vector<KeypointAndDesc> &vResultKeys);
+    
+    void ComputePyramid(cv::Mat image);
 
     int nfeatures;
     double scaleFactor;
@@ -112,9 +155,10 @@ protected:
     std::vector<float> mvInvScaleFactor;    
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
+
+    vector<double> timeTotal, timeConvertRes;
 };
 
 } //namespace ORB_SLAM
 
 #endif
-

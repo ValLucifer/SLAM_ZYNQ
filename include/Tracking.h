@@ -113,6 +113,10 @@ public:
     // True if local mapping is deactivated and we are performing only localization
     bool mbOnlyTracking;
 
+    void printORBProfileInfo() {
+        mpORBextractorLeft->printProfileInfo();
+    }
+
     void Reset();
 
     void printProfileInfo();
