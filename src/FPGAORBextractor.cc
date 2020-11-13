@@ -117,6 +117,10 @@ _FPGAORBextractor::_FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints, in
     gaus.startSendChannel();
     desc.startRecvChannel();
 
+    timeCopyImgToCmaBuffer.reserve(2000);
+    timeOnFpga.reserve(2000);
+    timeCopyResFromCmaBuffer.reserve(2000);
+
     printf("-----FPGAORBExtractor Constructor-----\n");
 }
 
@@ -127,14 +131,15 @@ void _FPGAORBextractor::extract(const Mat &img, vector< vector<KeypointAndDesc> 
     memcpy(srcBuf + 1, (void*)img.data, imgSizeInBytes);
     auto t2 = chrono::steady_clock::now();
     count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-    printf("copy img to cma buffer spent %lf s\n", count);
+    // printf("copy img to cma buffer spent %lf s\n", count);
+    timeCopyImgToCmaBuffer.push_back(count);
 
     int bytesRecvd;
     int totalBytesRecvd = 0;
     vector<int> cntKeypointsPerLayer(nlevels);
     t1 = chrono::steady_clock::now();
     for(int i = 0; i < nlevels; i++) {
-        auto t3 = chrono::steady_clock::now();
+        // auto t3 = chrono::steady_clock::now();
         *srcBuf = i;
 
         desc.recv(dstBufPAddr + totalBytesRecvd, dstBufSizeInBytes);
@@ -149,15 +154,15 @@ void _FPGAORBextractor::extract(const Mat &img, vector< vector<KeypointAndDesc> 
         cntKeypointsPerLayer[i] = (bytesRecvd / sizeof(KeypointAndDesc)) - 1;
         totalBytesRecvd += bytesRecvd;
 
-        auto t4 = chrono::steady_clock::now();
-        count = chrono::duration_cast<std::chrono::duration<double> >(t4 - t3).count();
-        printf("layer %d, on fpga spent %lf s\n", i, count);
+        // auto t4 = chrono::steady_clock::now();
+        // count = chrono::duration_cast<std::chrono::duration<double> >(t4 - t3).count();
+        // printf("layer %d, on fpga spent %lf s\n", i, count);
 
         // printf("received %d bytes in layer %d\n", bytesRecvd, i);
     }
     t2 = chrono::steady_clock::now();
     count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-    printf("totally, on fpga spent %lf s\n", count);
+    timeOnFpga.push_back(count);
 
     int offsetInKpAndDesc = 0;
     allKpAndDesc.resize(nlevels);
@@ -168,7 +173,25 @@ void _FPGAORBextractor::extract(const Mat &img, vector< vector<KeypointAndDesc> 
     }
     t2 = chrono::steady_clock::now();
     count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-    printf("copy result from cma buffer spent %lf s\n", count);
+    // printf("copy result from cma buffer spent %lf s\n", count);
+    timeCopyResFromCmaBuffer.push_back(count);
+}
+
+void _FPGAORBextractor::printProfileInfo() {
+    double avgTimeCopyImgToCmaBuffer = 0, avgTimeOnFpga = 0, avgTimeCopyResFromCmaBuffer = 0;
+    for(int i = 0; i < timeCopyImgToCmaBuffer.size(); i++) {
+        avgTimeCopyImgToCmaBuffer += timeCopyImgToCmaBuffer[i];
+        avgTimeOnFpga += timeOnFpga[i];
+        avgTimeCopyResFromCmaBuffer += timeCopyResFromCmaBuffer[i];
+    }
+    
+    avgTimeCopyImgToCmaBuffer /= timeCopyImgToCmaBuffer.size();
+    avgTimeOnFpga /= timeOnFpga.size();
+    avgTimeCopyResFromCmaBuffer /= timeCopyResFromCmaBuffer.size();
+
+    printf("average time spent on copying img to cma buffer: %lf s.\n", avgTimeCopyImgToCmaBuffer);
+    printf("average time spent on fpga: %lf\n", avgTimeOnFpga);
+    printf("average time spent on copying result from cma buffer: %lf\n", avgTimeCopyResFromCmaBuffer);
 }
 
 ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
@@ -212,6 +235,9 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
         nDesiredFeaturesPerScale *= factor;
     }
     mnFeaturesPerLevel[nlevels-1] = std::max(nfeatures - sumFeatures, 0);
+
+    timeTotal.reserve(2000);
+    timeConvertRes.reserve(2000);
 
     printf("-----ORBextractor constructor-----\n");
 }
@@ -805,12 +831,12 @@ void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeypointAndDesc> >& all
         vector<KeypointAndDesc> & layerKeypointAndDescs = distributedKeypointAndDescs[level];
 
         // printf("layer %d distribute starts\n", level);
-        auto t1 = chrono::steady_clock::now();
+        // auto t1 = chrono::steady_clock::now();
         DistributeOctTree(vToDistributeKeypointAndDescs, minBorderX, maxBorderX,
                           minBorderY, maxBorderY, mnFeaturesPerLevel[level], level, distributedKeypointAndDescs[level]);
-        auto t2 = chrono::steady_clock::now();
-        count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-        printf("layer %d octTree distribute done, spent %lf s.\n", level, count);
+        // auto t2 = chrono::steady_clock::now();
+        // count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+        // printf("layer %d octTree distribute done, spent %lf s.\n", level, count);
 
         const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
     }
@@ -820,6 +846,7 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
                       OutputArray _descriptors)
 {
     double count;
+    auto t0 = chrono::steady_clock::now();
 
     if(_image.empty())
         return;
@@ -832,11 +859,11 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
 
     vector< vector<KeypointAndDesc> > allKeypointAndDescs;
 
-    auto t1 = chrono::steady_clock::now();
+    // auto t1 = chrono::steady_clock::now();
     _fpgaORBextractor.extract(image, allKeypointAndDescs);
-    auto t2 = chrono::steady_clock::now();
-    count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-    printf("fpga extract and compute desc spent %lf s.\n", count);
+    // auto t2 = chrono::steady_clock::now();
+    // count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+    // printf("fpga extract and compute desc spent %lf s.\n", count);
 
     vector < vector<KeypointAndDesc> > distributedKeypointAndDescs;
     ComputeKeyPointsOctTree(allKeypointAndDescs, distributedKeypointAndDescs);
@@ -858,7 +885,7 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
     _keypoints.clear();
     _keypoints.reserve(nkeypoints);
 
-    t1 = chrono::steady_clock::now();
+    auto t1 = chrono::steady_clock::now();
     int offset = 0;
     for (int level = 0; level < nlevels; ++level)
     {
@@ -897,9 +924,13 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
         // And add the keypoints to the output
         // _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
     }
-    t2 = chrono::steady_clock::now();
+    auto t2 = chrono::steady_clock::now();
     count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-    printf("convert kp and desc spent %lf s.\n", count);
+    // printf("convert kp and desc spent %lf s.\n", count);
+    timeConvertRes.push_back(count);
+    
+    count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t0).count();
+    timeTotal.push_back(count);
 
     // printf("ORBextractor operator () done\n");
     // printf("\t%d\n", _keypoints.size());
@@ -931,6 +962,23 @@ void ORBextractor::ComputePyramid(cv::Mat image)
         }
     }
 
+}
+
+void ORBextractor::printProfileInfo() {
+    double avgTimeTotal = 0, avgTimeConvertRes = 0;
+    for(int i = 0; i < timeTotal.size(); i++) {
+        avgTimeTotal += timeTotal[i];
+        avgTimeConvertRes += timeConvertRes[i];
+    }
+    
+    avgTimeTotal /= timeTotal.size();
+    avgTimeConvertRes /= timeConvertRes.size();
+
+    printf("-----ORBextractor timing info-----\n");
+    _fpgaORBextractor.printProfileInfo();
+    printf("average time spent on converting result format: %lf s\n", avgTimeConvertRes);
+    printf("average time spent on extract kp and compute desc: %lf\n", avgTimeTotal);
+    printf("-----------------------------------\n");
 }
 
 } //namespace ORB_SLAM

@@ -43,15 +43,11 @@ class _FPGAORBextractor {
 public:
 
     _FPGAORBextractor() {}
-    // _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints);
     _FPGAORBextractor(int imgSizeInBytes, int maxCntKeypoints, int nLevels, float factor);
 
     void extract(const Mat &img, vector< vector<KeypointAndDesc> > &allKpAndDesc);
 
-    // ~FPGAORBextractor() {
-    //     fast.destroy();
-    // }
-
+    void printProfileInfo();
 private:
     int imgSizeInBytes, dstBufSizeInBytes;
     int nlevels;
@@ -62,6 +58,8 @@ private:
     uchar *srcBuf;
     KeypointAndDesc *dstBuf;
     unsigned long srcBufPAddr, dstBufPAddr;
+
+    vector<double> timeCopyImgToCmaBuffer, timeOnFpga, timeCopyResFromCmaBuffer;
 };
 
 class ExtractorNode
@@ -121,6 +119,9 @@ public:
 
     std::vector<cv::Mat> mvImagePyramid;
 
+    void printProfileInfo();
+
+
 protected:
 
     _FPGAORBextractor _fpgaORBextractor;
@@ -150,6 +151,8 @@ protected:
     std::vector<float> mvInvScaleFactor;    
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
+
+    vector<double> timeTotal, timeConvertRes;
 };
 
 } //namespace ORB_SLAM
