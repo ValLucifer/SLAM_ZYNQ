@@ -115,6 +115,8 @@ public:
 
     void Reset();
 
+    void printProfileInfo();
+
 protected:
 
     // Main tracking function. It is independent of the input sensor.

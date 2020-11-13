@@ -25,6 +25,7 @@
 #include <list>
 #include <opencv/cv.h>
 
+#include <chrono>
 
 namespace ORB_SLAM2
 {
@@ -82,7 +83,10 @@ public:
         return mvInvLevelSigma2;
     }
 
+    void printProfileInfo();
+
     std::vector<cv::Mat> mvImagePyramid;
+    std::vector<double> timeTotal;
 
 protected:
 

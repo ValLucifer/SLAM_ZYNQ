@@ -467,6 +467,8 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
         umax[v] = v0;
         ++v0;
     }
+
+    timeTotal.reserve(2000);
 }
 
 static void computeOrientation(const Mat& image, vector<KeyPoint>& keypoints, const vector<int>& umax)
@@ -1043,6 +1045,8 @@ static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Ma
 void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                       OutputArray _descriptors)
 { 
+    auto t1 = chrono::steady_clock::now();
+
     if(_image.empty())
         return;
 
@@ -1102,6 +1106,10 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
         // And add the keypoints to the output
         _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
     }
+
+    auto t2 = chrono::steady_clock::now();
+    double count = chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+    timeTotal.push_back(count);
 }
 
 void ORBextractor::ComputePyramid(cv::Mat image)
@@ -1128,7 +1136,17 @@ void ORBextractor::ComputePyramid(cv::Mat image)
                            BORDER_REFLECT_101);            
         }
     }
-
 }
 
+void ORBextractor::printProfileInfo() {
+    double avgTimeTotal = 0;
+    for(int i = 0; i < timeTotal.size(); i++) {
+        avgTimeTotal += timeTotal[i];
+    }
+    avgTimeTotal /= timeTotal.size();
+
+    printf("-----ORBextractor-----\n");
+    printf("average time spent on extracting kp: %lf\n", avgTimeTotal);
+    printf("----------------------\n");
+}
 } //namespace ORB_SLAM

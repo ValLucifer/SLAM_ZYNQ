@@ -1587,6 +1587,8 @@ void Tracking::InformOnlyTracking(const bool &flag)
     mbOnlyTracking = flag;
 }
 
-
+void Tracking::printProfileInfo() {
+    mpORBextractorLeft->printProfileInfo();
+}
 
 } //namespace ORB_SLAM
