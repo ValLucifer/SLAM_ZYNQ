@@ -3,7 +3,6 @@ project(ORB_SLAM2_FPGA)
 
 SET(CMAKE_BUILD_TYPE Release)
 
-
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
 set( CMAKE_SYSTEM_NAME Linux )

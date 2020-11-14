@@ -121,9 +121,7 @@ public:
     void printProfileInfo();
 
     std::vector<cv::Mat> mvImagePyramid;
-    std::vector<double> timeTotal;
-
-    void printProfileInfo();
+    // std::vector<double> timeTotal;
 
 
 protected:
@@ -132,9 +130,6 @@ protected:
 
     void ComputeKeyPointsOctTree(vector<std::vector<KeypointAndDesc> >& allKeypointsAndDesc, 
                                  vector< vector<KeypointAndDesc> >& resultKeypointsAndDesc);    
-    vector<KeypointAndDesc> DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
-                                                   const int &minX, const int &maxX, const int &minY, const int &maxY,
-                                                   const int &nFeatures, const int &level);
     void DistributeOctTree(const std::vector<KeypointAndDesc>& vToDistributeKeypointAndDescs, 
                            const int &minX, const int &maxX, const int &minY, const int &maxY,
                            const int &nFeatures, const int &level, vector<KeypointAndDesc> &vResultKeys);
