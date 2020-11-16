@@ -29,3 +29,6 @@
 * lib：项目中编译得到的动态链接库
 * utils：目前其中存放了用于将vivado产生的bit格式比特流转换为fpga manager使用的bin格式的Python脚本
 * on-board files：开发板上用到的文件，其中包括用于烧写PL端的bin文件、测试使用的可执行文件、用于评测执行结果的程序及方便自动运行的shell脚本
+* PL: PL端工程文件
+    * ip：IP核的HLS源码
+    * vivado_project: PL端的vivado项目
