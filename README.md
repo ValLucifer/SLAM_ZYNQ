@@ -30,5 +30,19 @@
 * utils：目前其中存放了用于将vivado产生的bit格式比特流转换为fpga manager使用的bin格式的Python脚本
 * on-board files：开发板上用到的文件，其中包括用于烧写PL端的bin文件、测试使用的可执行文件、用于评测执行结果的程序及方便自动运行的shell脚本
 * PL: PL端工程文件
-    * ip：IP核的HLS源码
-    * vivado_project: PL端的vivado项目
+    * ip：IP核的HLS源码及生成IP核使用的tcl脚本
+    * project_1: 用于重建vivado工程的tcl脚本
+
+## 工程重建方法
+需使用**Vivado 2018.3**
+### 构建IP核
+在HLS Command Prompt中进入PL/ip目录下输入以下命令：
+```
+vivado_hls -f build_ip.tcl
+```
+### 重建Vivado工程
+在Vivado TCL Shell中进入PL/project_1目录，输入以下命令：
+```
+source orb_fpga.tcl
+```
+之后会在project_1目录下生成myproj目录，使用Vivado打开其中的project_1.xpr项目文件，为block design创建HDL wrapper后即可开始生成bitstream

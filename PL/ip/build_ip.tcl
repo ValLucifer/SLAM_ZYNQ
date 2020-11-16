@@ -7,3 +7,5 @@ cd ..
 cd comFAST
 source build_ip.tcl
 cd ..
+cd transform
+source build_ip.tcl
